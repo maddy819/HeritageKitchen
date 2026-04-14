@@ -23,7 +23,7 @@ import "bootstrap-icons/font/bootstrap-icons.min.css";
 
 import "../../public/assets/libs/feather-webfont/dist/feather-icons.css";
 import "../../public/assets/css/theme.min.css";
-//import "../../public/assets/js/theme.min.js";
+import "../../public/assets/js/theme.min.js";
 
 import ApexCharts from "apexcharts";
 

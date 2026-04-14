@@ -100,13 +100,13 @@ function submit() {
                         <h4 class="mb-3 h5">Product Images</h4>
 
                         <!-- input -->
-                        <FileUpload />
+                        <FileUpload id="product-dropzone" url="https://httpbin.org/post" />
                         </div>
                     </div>
                     <!-- input -->
                     <div class="mb-3 col-lg-12 mt-5">
                         <h4 class="mb-3 h5">Product Descriptions</h4>
-                        <Editor />
+                        <Editor id="editor" />
                     </div>
                     </div>
                 </div>

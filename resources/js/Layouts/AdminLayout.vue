@@ -64,7 +64,7 @@ router.on("finish", async () => {
     await nextTick();
 
     destroyCharts();
-    destroyDropzones();
+    // destroyDropzones();
     destroyEditor();
     destroyDatepickers();
 });

@@ -1,37 +1,68 @@
 <script setup>
 import Editor from '@/Components/UI/Editor.vue';
+import FileUpload from '@/Components/UI/FileUpload.vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 import { getEditorContent } from "@/Plugins/Editor";
-import { getDropzoneFiles } from '@/Plugins/dropzone'
+import { getDropzoneInstance } from '@/Plugins/dropzone'
 import { route } from 'ziggy-js';
 import InputLabel from '@/Components/UI/InputLabel.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
+import Button from '@/Components/UI/Button.vue';
+import TextArea from '@/Components/UI/TextArea.vue';
 import { onMounted, nextTick } from "vue"
 import { initDatepickers } from "@/Plugins/flatpickr"
-import { Link } from '@inertiajs/vue3';
+import { Link, useForm } from '@inertiajs/vue3';
+import axios from 'axios';
 
 onMounted(async () => {
     await nextTick()
     initDatepickers()
 })
 
-function submit() {
+const form = useForm({
+    name: '',
+    slug: '',
+    parent: '',
+    description: '',
+    status: '1',
+    meta_title: '',
+    meta_description: '',
+
+});
+
+async function submit() {
     const description = getEditorContent();
-    const files = getDropzoneFiles()
+    const dz = getDropzoneInstance();
 
-    console.log(description); // 🔥 your editor value
-    console.log(files); // 🔥 your dropzone files
+    // ✅ create FormData
+    const formData = new FormData();
 
-    // Example: FormData for backend
-    const formData = new FormData()
+    // append normal fields
+    formData.append("name", form.name);
+    formData.append("slug", form.slug);
+    formData.append("parent", form.parent);
+    formData.append("description", description);
+    formData.append("status", form.status);
+    formData.append("meta_title", form.meta_title);
+    formData.append("meta_description", form.meta_description);
 
-    formData.append('description', description)
+    // ✅ append dropzone files manually
+    if (dz) {
+        dz.files.forEach((file, index) => {
+            if (file instanceof File) {
+                formData.append(`images[${index}]`, file);
+            }
+        });
+    }
 
-    files.forEach((file, index) => {
-        if (file instanceof File) {
-            formData.append(`images[${index}]`, file)
+    // ✅ send request
+    const response = await axios.post(route('admin.categories.store'), formData, {
+        headers: {
+            "Content-Type": "multipart/form-data"
         }
-    })
+    });
+
+    console.log(response.data);
 }
 </script>
 
@@ -48,8 +79,8 @@ function submit() {
                   <!-- breacrumb -->
                   <nav aria-label="breadcrumb">
                     <ol class="breadcrumb mb-0">
-                      <li class="breadcrumb-item"><a href="#" class="text-inherit">Dashboard</a></li>
-                      <li class="breadcrumb-item"><a href="#" class="text-inherit">Categories</a></li>
+                      <li class="breadcrumb-item"><Link :href="route('admin.dashboard')" class="text-inherit">Dashboard</Link></li>
+                      <li class="breadcrumb-item"><Link :href="route('admin.categories')" class="text-inherit">Categories</Link></li>
                       <li class="breadcrumb-item active" aria-current="page">Add New Category</li>
                     </ol>
                   </nav>
@@ -65,95 +96,82 @@ function submit() {
               <!-- card -->
               <div class="card mb-6 shadow border-0">
                 <!-- card body -->
-                <div class="card-body p-6">
-                  <h4 class="mb-5 h5">Category Image</h4>
-                  <div class="mb-4 d-flex">
-                    <div class="position-relative">
-                      <img class="image icon-shape icon-xxxl bg-light rounded-4" src="/assets/images/icons/bakery.svg" alt="Image" />
+                <form @submit.prevent="submit" class="needs-validation" novalidate>
+                  <div class="card-body p-6">
+                    <h4 class="mb-5 h5">Category Image</h4>
+                    <div class="mb-3 col-lg-12">
+                      <FileUpload id="category-dropzone" url="https://httpbin.org/post" />
+                    </div>
+                    <h4 class="mb-4 h5 mt-5">Category Information</h4>
 
-                      <div class="file-upload position-absolute end-0 top-0 mt-n2 me-n1">
-                        <input type="file" class="file-input" />
-                        <span class="icon-shape icon-sm rounded-circle bg-white">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="bi bi-pencil-fill text-muted" viewBox="0 0 16 16">
-                            <path
-                              d="M12.854.146a.5.5 0 0 0-.707 0L10.5 1.793 14.207 5.5l1.647-1.646a.5.5 0 0 0 0-.708l-3-3zm.646 6.061L9.793 2.5 3.293 9H3.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.207l6.5-6.5zm-7.468 7.468A.5.5 0 0 1 6 13.5V13h-.5a.5.5 0 0 1-.5-.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.5-.5V10h-.5a.499.499 0 0 1-.175-.032l-.179.178a.5.5 0 0 0-.11.168l-2 5a.5.5 0 0 0 .65.65l5-2a.5.5 0 0 0 .168-.11l.178-.178z"
-                            />
-                          </svg>
-                        </span>
+                    <div class="row">
+                      <!-- input -->
+                      <div class="mb-3 col-lg-6">
+                        <InputLabel for="name" class="form-label">Category Name</InputLabel>
+                        <TextInput v-model="form.name" id="name" type="text" name="name" class="form-control" placeholder="Category Name" required="required" />
+                      </div>
+                      <!-- input -->
+                      <div class="mb-3 col-lg-6">
+                        <InputLabel for="slug" class="form-label">Slug</InputLabel>
+                        <TextInput type="text" v-model="form.slug" name="slug" id="slug" class="form-control" placeholder="Slug" required="required" />
+                      </div>
+                      <!-- input -->
+                      <div class="mb-3 col-lg-6">
+                        <InputLabel for="parent" class="form-label">Parent Category</InputLabel>
+                        <select class="form-select" v-model="form.parent" id="parent" name="parent">
+                          <option selected>Category Name</option>
+                          <option value="Dairy, Bread & Eggs">Dairy, Bread & Eggs</option>
+                          <option value="Snacks & Munchies">Snacks & Munchies</option>
+                          <option value="Fruits & Vegetables">Fruits & Vegetables</option>
+                        </select>
+                      </div>
+                      <!-- <div class="mb-3 col-lg-6">
+                        <label class="form-label">Date</label>
+                        <input type="text" class="form-control datepicker" placeholder="Select Date" />
+                      </div> -->
+
+                      <!-- input -->
+                      <div class="mb-3 col-lg-12">
+                        <InputLabel for="editor" class="form-label">Descriptions</InputLabel>
+                        <Editor id="editor" />
+                      </div>
+
+                      <!-- input -->
+                      <div class="mb-3 col-lg-12">
+                        <label class="form-label" id="productSKU">Status</label>
+                        <br />
+                        <div class="form-check form-check-inline">
+                          <TextInput v-model="form.meta_title" class="form-check-input" type="radio" name="inlineRadioOptions" id="inlineRadio1" value="1" checked />
+                          <InputLabel class="form-check-label" for="inlineRadio1">Active</InputLabel>
+                        </div>
+                        <!-- input -->
+                        <div class="form-check form-check-inline">
+                          <TextInput v-model="form.meta_description" class="form-check-input" type="radio" name="inlineRadioOptions" id="inlineRadio2" value="0" />
+                          <InputLabel class="form-check-label" for="inlineRadio2">Disabled</InputLabel>
+                        </div>
+                        <!-- input -->
+                      </div>
+                      <div class="mb-3 col-lg-12 mt-5">
+                        <h4 class="mb-4 h5">Meta Data</h4>
+                        <!-- input -->
+                        <div class="mb-3">
+                          <InputLabel for="metatitle" class="form-label">Meta Title</InputLabel>
+                          <TextInput name="metatitle" type="text" id="metatitle" class="form-control" placeholder="Title" />
+                        </div>
+
+                        <!-- input -->
+                        <div class="mb-3">
+                          <InputLabel for="metadescription" class="form-label">Meta Description</InputLabel>
+                          <TextArea name="metaescription" class="form-control" id="metadescription" rows="3" placeholder="Meta Description" />
+                        </div>
+                      </div>
+                      <div class="col-lg-12">
+                        <Button href="#" class="btn btn-primary" :disabled="form.processing">{{ form.processing ? 'Creating Category...' : 'Create Category' }}</Button>
+                        <Button href="#" class="btn btn-secondary ms-2" :disabled="form.processing">{{ form.processing ? 'Saving...' : 'Save' }}</Button>
                       </div>
                     </div>
                   </div>
-                  <h4 class="mb-4 h5 mt-5">Category Information</h4>
-
-                  <div class="row">
-                    <!-- input -->
-                    <div class="mb-3 col-lg-6">
-                      <label class="form-label">Category Name</label>
-                      <input type="text" class="form-control" placeholder="Category Name" required />
-                    </div>
-                    <!-- input -->
-                    <div class="mb-3 col-lg-6">
-                      <label class="form-label">Slug</label>
-                      <input type="text" class="form-control" placeholder="Slug" required />
-                    </div>
-                    <!-- input -->
-                    <div class="mb-3 col-lg-6">
-                      <label class="form-label">Parent Category</label>
-                      <select class="form-select">
-                        <option selected>Category Name</option>
-                        <option value="Dairy, Bread & Eggs">Dairy, Bread & Eggs</option>
-                        <option value="Snacks & Munchies">Snacks & Munchies</option>
-                        <option value="Fruits & Vegetables">Fruits & Vegetables</option>
-                      </select>
-                    </div>
-                    <div class="mb-3 col-lg-6">
-                      <label class="form-label">Date</label>
-                      <input type="text" class="form-control datepicker" placeholder="Select Date" />
-                    </div>
-
-                    <div></div>
-                    <!-- input -->
-                    <div class="mb-3 col-lg-12">
-                      <label class="form-label">Descriptions</label>
-
-                      <Editor />
-                    </div>
-
-                    <!-- input -->
-                    <div class="mb-3 col-lg-12">
-                      <label class="form-label" id="productSKU">Status</label>
-                      <br />
-                      <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="radio" name="inlineRadioOptions" id="inlineRadio1" value="option1" checked />
-                        <label class="form-check-label" for="inlineRadio1">Active</label>
-                      </div>
-                      <!-- input -->
-                      <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="radio" name="inlineRadioOptions" id="inlineRadio2" value="option2" />
-                        <label class="form-check-label" for="inlineRadio2">Disabled</label>
-                      </div>
-                      <!-- input -->
-                    </div>
-                    <div class="mb-3 col-lg-12 mt-5">
-                      <h4 class="mb-4 h5">Meta Data</h4>
-                      <!-- input -->
-                      <div class="mb-3">
-                        <label class="form-label">Meta Title</label>
-                        <input type="text" class="form-control" placeholder="Title" />
-                      </div>
-
-                      <!-- input -->
-                      <div class="mb-3">
-                        <label class="form-label">Meta Description</label>
-                        <textarea class="form-control" rows="3" placeholder="Meta Description"></textarea>
-                      </div>
-                    </div>
-                    <div class="col-lg-12">
-                      <a href="#" class="btn btn-primary">Create Product</a>
-                      <a href="#" class="btn btn-secondary ms-2">Save</a>
-                    </div>
-                  </div>
-                </div>
+                </form>
               </div>
             </div>
           </div>

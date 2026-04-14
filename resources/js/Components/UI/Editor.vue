@@ -2,6 +2,13 @@
 import { onMounted, nextTick } from "vue";
 import { initEditor } from "@/Plugins/Editor";
 
+const props = defineProps({
+    id: {
+        type: String,
+        default: null
+    }
+});
+
 onMounted(async () => {
     await nextTick();
     initEditor();
@@ -10,6 +17,6 @@ onMounted(async () => {
 
 <template>
     <div>
-        <div id="editor" ref="editorRef" style="height: 200px;" ></div>
+        <div :id="id" ref="editorRef" style="height: 200px;" readonly ></div>
     </div>
 </template>

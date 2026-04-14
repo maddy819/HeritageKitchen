@@ -27,5 +27,28 @@ class AddCategoryController extends Controller
 
     public function store(Request $request)
     {
+        $uploadedFiles = [];
+
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $file) {
+                // generate unique name
+                $filename = time() . '_' . $file->getClientOriginalName();
+
+                // store in storage/app/public/categories
+                $path = $file->storeAs('categories', $filename, 'public');
+
+                $uploadedFiles[] = [
+                    'name' => $filename,
+                    'path' => $path,
+                    'url' => asset('storage/' . $path)
+                ];
+            }
+        }
+
+        return response()->json([
+            'message' => 'Category created successfully',
+            'data' => $request->all(),
+            'files' => $uploadedFiles
+        ]);
     }
 }
