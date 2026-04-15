@@ -17,7 +17,7 @@ class CategoriesController extends Controller
         $search = $request->input('search', '');
         $status = $request->input('status', '');
 
-        $categories = Category::with('children')
+        $categories = Category::with(['children', 'mainImage'])
             ->when($search !== '', function ($query) use ($search) {
                 return $query->where('name', 'like', "%{$search}%");
             })->when($status !== '' && $status !== null, function ($query) use ($status) {

@@ -10,3 +10,8 @@ export function useDropdown() {
 
     return { isOpen, toggle, open, close };
 }
+
+export const handleClickOutside = (event) => {
+    const { close } = useDropdown();
+    close();
+};
