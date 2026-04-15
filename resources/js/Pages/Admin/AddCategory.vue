@@ -9,7 +9,7 @@ import InputLabel from '@/Components/UI/InputLabel.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
 import Button from '@/Components/UI/Button.vue';
 import TextArea from '@/Components/UI/TextArea.vue';
-import { onMounted, nextTick } from "vue"
+import { onMounted, nextTick, ref, computed } from "vue"
 import { initDatepickers } from "@/Plugins/flatpickr"
 import { Link, useForm } from '@inertiajs/vue3';
 import axios from 'axios';
@@ -19,7 +19,36 @@ onMounted(async () => {
     initDatepickers()
 })
 
+const validationErrors = ref({});
+
+const props = defineProps({
+  user: Object,
+  categories: Array,
+  stats: Object,
+})
+
+// Frontend validation function
+const validateForm = () => {
+    const errors = {};
+    
+    if (!form.name.trim()) {
+        errors.name = 'Name is required';
+    } else if (form.name.length < 5) {
+        errors.name = 'Name must be at least 5 characters';
+    }
+    
+    if (!form.slug) {
+        errors.slug = 'Slug is required';
+    } else if (form.slug.length < 5) {
+        errors.slug = 'Slug must be at least 5 characters';
+    }
+    
+    validationErrors.value = errors;
+    return Object.keys(errors).length === 0;
+};
+
 const form = useForm({
+    id: '',
     name: '',
     slug: '',
     parent: '',
@@ -27,10 +56,18 @@ const form = useForm({
     status: '1',
     meta_title: '',
     meta_description: '',
-
 });
 
 async function submit() {
+    // Clear previous errors
+    validationErrors.value = {};
+    form.clearErrors(); // Clear Inertia form errors
+    
+    // Frontend validation
+    if (!validateForm()) {
+        return;
+    }
+
     const description = getEditorContent();
     const dz = getDropzoneInstance();
 
@@ -64,6 +101,33 @@ async function submit() {
 
     console.log(response.data);
 }
+
+// Create hierarchical list with -- indentation
+const hierarchicalCategories = computed(() => {
+  const categories = props.categories || []
+  const result = []
+  
+  // Only start with parent categories (parent_id is null)
+  const parentCategories = categories.filter(cat => cat.parent_id === null)
+  
+  const buildHierarchy = (items, level = 0) => {
+    for (const category of items) {
+      result.push({
+        id: category.id,
+        name: category.name,
+        display_name: `${'--'.repeat(level)}${category.name}`
+      })
+      
+      // Add children if they exist
+      if (category.children && category.children.length > 0) {
+        buildHierarchy(category.children, level + 1)
+      }
+    }
+  }
+  
+  buildHierarchy(parentCategories)
+  return result
+})
 </script>
 
 <template>
@@ -95,6 +159,14 @@ async function submit() {
             <div class="col-lg-12 col-12">
               <!-- card -->
               <div class="card mb-6 shadow border-0">
+                <!-- Display summary of all errors at the top -->
+                <div v-if="Object.keys(validationErrors).length > 0 || Object.keys(form.errors).length > 0" class="alert alert-danger mb-4">
+                    <strong>Please fix the following errors:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li v-for="error in validationErrors" :key="error">{{ error }}</li>
+                        <li v-for="error in form.errors" :key="error">{{ error }}</li>
+                    </ul>
+                </div>
                 <!-- card body -->
                 <form @submit.prevent="submit" class="needs-validation" novalidate>
                   <div class="card-body p-6">
@@ -107,22 +179,29 @@ async function submit() {
                     <div class="row">
                       <!-- input -->
                       <div class="mb-3 col-lg-6">
+                        <TextInput type="hidden" name="id" v-model="form.id" />
                         <InputLabel for="name" class="form-label">Category Name</InputLabel>
                         <TextInput v-model="form.name" id="name" type="text" name="name" class="form-control" placeholder="Category Name" required="required" />
+                        <div v-if="validationErrors.name || form.errors.name" class="invalid-feedback">{{ validationErrors.name || form.errors.name }}</div>
                       </div>
                       <!-- input -->
                       <div class="mb-3 col-lg-6">
                         <InputLabel for="slug" class="form-label">Slug</InputLabel>
                         <TextInput type="text" v-model="form.slug" name="slug" id="slug" class="form-control" placeholder="Slug" required="required" />
+                        <div v-if="validationErrors.slug || form.errors.slug" class="invalid-feedback">{{ validationErrors.slug || form.errors.slug }}</div>
                       </div>
                       <!-- input -->
                       <div class="mb-3 col-lg-6">
                         <InputLabel for="parent" class="form-label">Parent Category</InputLabel>
                         <select class="form-select" v-model="form.parent" id="parent" name="parent">
-                          <option selected>Category Name</option>
-                          <option value="Dairy, Bread & Eggs">Dairy, Bread & Eggs</option>
-                          <option value="Snacks & Munchies">Snacks & Munchies</option>
-                          <option value="Fruits & Vegetables">Fruits & Vegetables</option>
+                          <option value="" selected>Select Parent</option>
+                          <option 
+                            v-for="category in hierarchicalCategories" 
+                            :key="category.id" 
+                            :value="category.id"
+                          >
+                            {{ category.display_name }}
+                          </option>
                         </select>
                       </div>
                       <!-- <div class="mb-3 col-lg-6">
@@ -166,8 +245,8 @@ async function submit() {
                         </div>
                       </div>
                       <div class="col-lg-12">
-                        <Button href="#" class="btn btn-primary" :disabled="form.processing">{{ form.processing ? 'Creating Category...' : 'Create Category' }}</Button>
-                        <Button href="#" class="btn btn-secondary ms-2" :disabled="form.processing">{{ form.processing ? 'Saving...' : 'Save' }}</Button>
+                        <Button v-if="!form.id" href="#" class="btn btn-primary" :disabled="form.processing">{{ form.processing ? 'Creating...' : 'Create' }}</Button>
+                        <Button v-if="form.id"  href="#" class="btn btn-secondary ms-2" :disabled="form.processing">{{ form.processing ? 'Saving...' : 'Save' }}</Button>
                       </div>
                     </div>
                   </div>

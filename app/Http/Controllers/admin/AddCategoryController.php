@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -17,6 +18,7 @@ class AddCategoryController extends Controller
     {
         return Inertia::render('Admin/AddCategory', [
             'user' => auth()->user(),
+            'categories' => Category::with('children')->get(), // Get ALL categories
             'stats' => [
                 'total_users' => User::count(),
                 'customers' => User::where('role', 'customer')->count(),

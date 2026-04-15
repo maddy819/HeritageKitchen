@@ -24,14 +24,11 @@ return new class extends Migration {
                 ->constrained('categories')
                 ->onDelete('cascade');
 
-            // For category ordering
-            $table->integer('order')->default(0);
-
             // Status control
-            $table->boolean('is_active')->default(true);
+            $table->integer('is_active')->default(1);
 
-            // Optional: store category image path
-            $table->string('image')->nullable();
+            $table->text('meta_title')->nullable();
+            $table->text('meta_description')->nullable();
 
             $table->timestamps();
 

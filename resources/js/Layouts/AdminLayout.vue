@@ -37,7 +37,7 @@ import { initCharts } from '@/Plugins/charts.js';
 import { destroyCharts } from "@/Plugins/charts.js";
 import { destroyEditor } from '@/Plugins/Editor';
 import { destroyDatepickers } from '@/Plugins/flatpickr';
-import { destroyDropzones } from '@/Plugins/dropzone';
+import { initValidation } from '@/Plugins/validation';
 
 const props = defineProps({
     title: {
@@ -53,7 +53,8 @@ const auth = computed(() => page.props.auth || { user: null })
 
 onMounted(async () => {
     initCharts();
-
+    initValidation();
+    
     document.querySelectorAll('[data-bs-toggle="dropdown"]').forEach((el) => {
         new bootstrap.Dropdown(el);
     });
@@ -64,7 +65,7 @@ router.on("finish", async () => {
     await nextTick();
 
     destroyCharts();
-    // destroyDropzones();
+    initValidation();
     destroyEditor();
     destroyDatepickers();
 });

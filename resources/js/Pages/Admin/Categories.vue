@@ -1,8 +1,149 @@
 <script setup>
 import AdminLayout from '@/Layouts/AdminLayout.vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import { route } from 'ziggy-js';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 
+const openId = ref(null)
+
+const toggleDropdown = (id) => {
+  openId.value = openId.value === id ? null : id
+}
+
+const handleClickOutside = (event) => {
+  if (!event.target.closest('.dropdown')) {
+    openId.value = null
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+
+const props = defineProps({
+  categories: {
+      type: Object,
+      required: true
+  },
+  filters: {
+      type: Object,
+      default: () => ({ search: '', status: '' })
+  }
+});
+
+const search = ref(props.filters.search || '');
+const status = ref(props.filters.status || '');
+const selectedCategories = ref([]);
+const selectAll = ref(false);
+
+// Watch for search input with debounce
+let searchTimeout;
+watch(search, (value) => {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    router.get(route('admin.categories'), 
+      { search: value, status: status.value }, 
+      { preserveState: true, preserveScroll: true, replace: true }
+    );
+  }, 300);
+});
+
+// Watch for status change
+watch(status, (value) => {
+  router.get(route('admin.categories'), 
+    { search: search.value, status: value }, 
+    { preserveState: true, preserveScroll: true, replace: true }
+  );
+});
+
+// Watch for categories changes to update selected categories
+watch(() => props.categories.data, () => {
+  selectedCategories.value = [];
+  selectAll.value = false;
+});
+
+// Handle select all - FIXED
+watch(selectAll, (value) => {
+  if (value) {
+    selectedCategories.value = props.categories.data.map(category => category.id);
+  } else {
+    selectedCategories.value = [];
+  }
+});
+
+// Handle individual select - FIXED
+const toggleSelect = (categoryId, event) => {
+  // Use the checked property from the event
+  if (event.target.checked) {
+    selectedCategories.value.push(categoryId);
+  } else {
+    const index = selectedCategories.value.indexOf(categoryId);
+    if (index > -1) {
+      selectedCategories.value.splice(index, 1);
+    }
+  }
+  
+  // Update selectAll state
+  selectAll.value = selectedCategories.value.length === props.categories.data.length;
+};
+
+// Alternative simpler method without event
+const toggleSelectSimple = (categoryId) => {
+  const index = selectedCategories.value.indexOf(categoryId);
+  if (index > -1) {
+    selectedCategories.value.splice(index, 1);
+  } else {
+    selectedCategories.value.push(categoryId);
+  }
+  selectAll.value = selectedCategories.value.length === props.categories.data.length;
+};
+
+// Load page
+const loadPage = (url) => {
+  router.get(url, {}, { preserveState: true, preserveScroll: true });
+};
+
+// Delete category
+const deleteCategory = (id) => {
+  if (confirm('Are you sure you want to delete this category?')) {
+    router.delete(route('admin.categories.destroy', id), {
+      preserveScroll: true,
+      onSuccess: () => {
+          // Optionally show success message
+      }
+    });
+  }
+};
+
+// Delete multiple categories
+const deleteSelected = () => {
+  if (selectedCategories.value.length === 0) return;
+  if (confirm(`Delete ${selectedCategories.value.length} selected categories?`)) {
+    router.post(route('admin.categories.bulk-delete'), {
+      ids: selectedCategories.value
+    }, {
+      preserveScroll: true,
+      onSuccess: () => {
+        selectedCategories.value = [];
+        selectAll.value = false;
+      }
+    });
+  }
+};
+
+// Edit category
+const editCategory = (id) => {
+  router.get(route('admin.categories.edit', id));
+};
+
+// Computed property to check if category is selected
+const isSelected = (categoryId) => {
+  return selectedCategories.value.includes(categoryId);
+};
 </script>
 
 <template>
@@ -26,6 +167,13 @@ import { route } from 'ziggy-js';
                 <!-- button -->
                 <div>
                   <Link :href="route('admin.categories.add')" class="btn btn-primary">Add New Category</Link>
+                  <button 
+                      v-if="selectedCategories.length > 0" 
+                      @click="deleteSelected"
+                      class="btn btn-danger ms-2"
+                  >
+                      Delete Selected ({{ selectedCategories.length }})
+                  </button>
                 </div>
               </div>
             </div>
@@ -38,16 +186,22 @@ import { route } from 'ziggy-js';
                   <div class="row justify-content-between">
                     <div class="col-lg-4 col-md-6 col-12 mb-2 mb-md-0">
                       <!-- form -->
-                      <form class="d-flex" role="search">
-                        <input class="form-control" type="search" placeholder="Search Category" aria-label="Search" />
+                      <form class="d-flex" role="search" @submit.prevent>
+                          <input 
+                              class="form-control" 
+                              type="search" 
+                              placeholder="Search Category" 
+                              aria-label="Search"
+                              v-model="search"
+                          />
                       </form>
                     </div>
                     <!-- select option -->
                     <div class="col-xl-2 col-md-4 col-12">
-                      <select class="form-select">
-                        <option selected>Status</option>
-                        <option value="Published">Published</option>
-                        <option value="Unpublished">Unpublished</option>
+                      <select class="form-select" v-model="status">
+                        <option value="">All Status</option>
+                        <option value="1">Active</option>
+                        <option value="0">Inactive</option>
                       </select>
                     </div>
                   </div>
@@ -61,50 +215,79 @@ import { route } from 'ziggy-js';
                         <tr>
                           <th>
                             <div class="form-check">
-                              <input class="form-check-input" type="checkbox" value="" id="checkAll" />
+                              <input class="form-check-input" type="checkbox" id="checkAll" v-model="selectAll" />
                               <label class="form-check-label" for="checkAll"></label>
                             </div>
                           </th>
                           <th>Icon</th>
                           <th>Name</th>
-                          <th>Proudct</th>
+                          <th>Parent</th>
                           <th>Status</th>
-
-                          <th></th>
+                          <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        <tr>
+                        <tr v-for="category in categories.data" :key="category.id">
                           <td>
                             <div class="form-check">
-                              <input class="form-check-input" type="checkbox" value="" id="categoryOne" />
-                              <label class="form-check-label" for="categoryOne"></label>
+                              <!-- METHOD 1: Using v-model with computed property -->
+                              <input 
+                                  class="form-check-input" 
+                                  type="checkbox" 
+                                  :value="category.id"
+                                  :id="'category' + category.id"
+                                  :checked="isSelected(category.id)"
+                                  @change="(e) => toggleSelect(category.id, e)"
+                              />
+                              <label class="form-check-label" :for="'category' + category.id"></label>
                             </div>
                           </td>
                           <td>
-                            <a href="#!"><img src="/assets/images/icons/snacks.svg" alt="" class="icon-shape icon-sm" /></a>
+                            <a href="#!">
+                              <img 
+                                :src="category.image_url || '/assets/images/icons/snacks.svg'" 
+                                alt="" 
+                                class="icon-shape icon-sm" 
+                              />
+                            </a>
                           </td>
-                          <td><a href="#" class="text-reset">Snack & Munchies</a></td>
-                          <td>12</td>
-
                           <td>
-                            <span class="badge bg-light-primary text-dark-primary">Published</span>
+                            <a href="#" class="text-reset">{{ category.name }}</a>
+                            <span v-if="category.children && category.children.length > 0" class="badge bg-light-secondary ms-2">
+                              {{ category.children.length }} sub
+                            </span>
+                          </td>
+                          <td>
+                            <span v-if="category.parent_id === null" class="badge bg-light-primary text-dark-primary">
+                              Parent
+                            </span>
+                            <span v-else class="badge bg-light-info text-dark-info">
+                              Child
+                            </span>
+                          </td>
+                          <td>
+                            <span v-if="category.is_active == 1" class="badge bg-light-primary text-dark-primary">
+                              Active
+                            </span>
+                            <span class="badge bg-light-danger text-dark-danger" v-else>
+                              Inactive
+                            </span>
                           </td>
 
                           <td>
                             <div class="dropdown">
-                              <a href="#" class="text-reset" data-bs-toggle="dropdown" aria-expanded="false">
+                              <button class="text-reset nav-link" @click.prevent="toggleDropdown(category.id)">
                                 <i class="feather-icon icon-more-vertical fs-5"></i>
-                              </a>
-                              <ul class="dropdown-menu">
+                              </button>
+                              <ul v-if="openId === category.id" class="dropdown-menu show">
                                 <li>
-                                  <a class="dropdown-item" href="#">
+                                  <a class="dropdown-item" href="#" @click.prevent="deleteCategory(category.id)">
                                     <i class="bi bi-trash me-3"></i>
                                     Delete
                                   </a>
                                 </li>
                                 <li>
-                                  <a class="dropdown-item" href="#">
+                                  <a class="dropdown-item" href="#" @click.prevent="editCategory(category.id)">
                                     <i class="bi bi-pencil-square me-3"></i>
                                     Edit
                                   </a>
@@ -113,331 +296,57 @@ import { route } from 'ziggy-js';
                             </div>
                           </td>
                         </tr>
-                        <tr>
-                          <td>
-                            <div class="form-check">
-                              <input class="form-check-input" type="checkbox" value="" id="categoryTwo" />
-                              <label class="form-check-label" for="categoryTwo"></label>
-                            </div>
-                          </td>
-                          <td>
-                            <a href="#!"><img src="/assets/images/icons/bakery.svg" alt="" class="icon-shape icon-sm" /></a>
-                          </td>
-                          <td><a href="#" class="text-reset">Bakery & Biscuits</a></td>
-                          <td>8</td>
-
-                          <td>
-                            <span class="badge bg-light-primary text-dark-primary">Published</span>
-                          </td>
-
-                          <td>
-                            <div class="dropdown">
-                              <a href="#" class="text-reset" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="feather-icon icon-more-vertical fs-5"></i>
-                              </a>
-                              <ul class="dropdown-menu">
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-trash me-3"></i>
-                                    Delete
-                                  </a>
-                                </li>
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-pencil-square me-3"></i>
-                                    Edit
-                                  </a>
-                                </li>
-                              </ul>
-                            </div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <div class="form-check">
-                              <input class="form-check-input" type="checkbox" value="" id="categoryThree" />
-                              <label class="form-check-label" for="categoryThree"></label>
-                            </div>
-                          </td>
-                          <td>
-                            <a href="#!"><img src="/assets/images/icons/baby-food.svg" alt="" class="icon-shape icon-sm" /></a>
-                          </td>
-                          <td><a href="#" class="text-reset">Baby Care</a></td>
-                          <td>32</td>
-
-                          <td>
-                            <span class="badge bg-light-primary text-dark-primary">Published</span>
-                          </td>
-
-                          <td>
-                            <div class="dropdown">
-                              <a href="#" class="text-reset" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="feather-icon icon-more-vertical fs-5"></i>
-                              </a>
-                              <ul class="dropdown-menu">
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-trash me-3"></i>
-                                    Delete
-                                  </a>
-                                </li>
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-pencil-square me-3"></i>
-                                    Edit
-                                  </a>
-                                </li>
-                              </ul>
-                            </div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <div class="form-check">
-                              <input class="form-check-input" type="checkbox" value="" id="categoryFour" />
-                              <label class="form-check-label" for="categoryFour"></label>
-                            </div>
-                          </td>
-                          <td>
-                            <a href="#!"><img src="/assets/images/icons/wine.svg" alt="" class="icon-shape icon-sm" /></a>
-                          </td>
-                          <td><a href="#" class="text-reset">Cold Drinks & Juices</a></td>
-                          <td>34</td>
-
-                          <td>
-                            <span class="badge bg-light-primary text-dark-primary">Published</span>
-                          </td>
-
-                          <td>
-                            <div class="dropdown">
-                              <a href="#" class="text-reset" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="feather-icon icon-more-vertical fs-5"></i>
-                              </a>
-                              <ul class="dropdown-menu">
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-trash me-3"></i>
-                                    Delete
-                                  </a>
-                                </li>
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-pencil-square me-3"></i>
-                                    Edit
-                                  </a>
-                                </li>
-                              </ul>
-                            </div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <div class="form-check">
-                              <input class="form-check-input" type="checkbox" value="" id="categoryFive" />
-                              <label class="form-check-label" for="categoryFive"></label>
-                            </div>
-                          </td>
-                          <td>
-                            <a href="#!"><img src="/assets/images/icons/toiletries.svg" alt="" class="icon-shape icon-sm" /></a>
-                          </td>
-                          <td><a href="#" class="text-reset">Toiletries</a></td>
-                          <td>23</td>
-
-                          <td>
-                            <span class="badge bg-light-danger text-dark-danger">Unpublished</span>
-                          </td>
-
-                          <td>
-                            <div class="dropdown">
-                              <a href="#" class="text-reset" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="feather-icon icon-more-vertical fs-5"></i>
-                              </a>
-                              <ul class="dropdown-menu">
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-trash me-3"></i>
-                                    Delete
-                                  </a>
-                                </li>
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-pencil-square me-3"></i>
-                                    Edit
-                                  </a>
-                                </li>
-                              </ul>
-                            </div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <div class="form-check">
-                              <input class="form-check-input" type="checkbox" value="" id="categorySeven" />
-                              <label class="form-check-label" for="categorySeven"></label>
-                            </div>
-                          </td>
-                          <td>
-                            <a href="#!"><img src="/assets/images/icons/dairy.svg" alt="" class="icon-shape icon-sm" /></a>
-                          </td>
-                          <td><a href="#" class="text-reset">Dairy, Bread & Eggs</a></td>
-                          <td>16</td>
-
-                          <td>
-                            <span class="badge bg-light-primary text-dark-primary">Published</span>
-                          </td>
-
-                          <td>
-                            <div class="dropdown">
-                              <a href="#" class="text-reset" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="feather-icon icon-more-vertical fs-5"></i>
-                              </a>
-                              <ul class="dropdown-menu">
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-trash me-3"></i>
-                                    Delete
-                                  </a>
-                                </li>
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-pencil-square me-3"></i>
-                                    Edit
-                                  </a>
-                                </li>
-                              </ul>
-                            </div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <div class="form-check">
-                              <input class="form-check-input" type="checkbox" value="" id="categoryEight" />
-                              <label class="form-check-label" for="categoryEight"></label>
-                            </div>
-                          </td>
-                          <td>
-                            <a href="#!"><img src="/assets/images/icons/fish.svg" alt="" class="icon-shape icon-sm" /></a>
-                          </td>
-                          <td><a href="#" class="text-reset">Chicken, Meat & Fish</a></td>
-                          <td>14</td>
-
-                          <td>
-                            <span class="badge bg-light-primary text-dark-primary">Published</span>
-                          </td>
-
-                          <td>
-                            <div class="dropdown">
-                              <a href="#" class="text-reset" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="feather-icon icon-more-vertical fs-5"></i>
-                              </a>
-                              <ul class="dropdown-menu">
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-trash me-3"></i>
-                                    Delete
-                                  </a>
-                                </li>
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-pencil-square me-3"></i>
-                                    Edit
-                                  </a>
-                                </li>
-                              </ul>
-                            </div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <div class="form-check">
-                              <input class="form-check-input" type="checkbox" value="" id="categoryNine" />
-                              <label class="form-check-label" for="categoryNine"></label>
-                            </div>
-                          </td>
-                          <td>
-                            <a href="#!"><img src="/assets/images/icons/fruit.svg" alt="" class="icon-shape icon-sm" /></a>
-                          </td>
-                          <td><a href="#" class="text-reset">Fruits & Vegetables</a></td>
-                          <td>32</td>
-
-                          <td>
-                            <span class="badge bg-light-primary text-dark-primary">Published</span>
-                          </td>
-
-                          <td>
-                            <div class="dropdown">
-                              <a href="#" class="text-reset" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="feather-icon icon-more-vertical fs-5"></i>
-                              </a>
-                              <ul class="dropdown-menu">
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-trash me-3"></i>
-                                    Delete
-                                  </a>
-                                </li>
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-pencil-square me-3"></i>
-                                    Edit
-                                  </a>
-                                </li>
-                              </ul>
-                            </div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <div class="form-check">
-                              <input class="form-check-input" type="checkbox" value="" id="categoryTen" />
-                              <label class="form-check-label" for="categoryTen"></label>
-                            </div>
-                          </td>
-                          <td>
-                            <a href="#!"><img src="/assets/images/icons/petfoods.svg" alt="" class="icon-shape icon-sm" /></a>
-                          </td>
-                          <td><a href="#" class="text-reset">Pet Food</a></td>
-                          <td>25</td>
-
-                          <td>
-                            <span class="badge bg-light-danger text-dark-danger">Unpublished</span>
-                          </td>
-
-                          <td>
-                            <div class="dropdown">
-                              <a href="#" class="text-reset" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="feather-icon icon-more-vertical fs-5"></i>
-                              </a>
-                              <ul class="dropdown-menu">
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-trash me-3"></i>
-                                    Delete
-                                  </a>
-                                </li>
-                                <li>
-                                  <a class="dropdown-item" href="#">
-                                    <i class="bi bi-pencil-square me-3"></i>
-                                    Edit
-                                  </a>
-                                </li>
-                              </ul>
-                            </div>
-                          </td>
+                        <tr v-if="categories.data.length === 0">
+                            <td colspan="6" class="text-center py-5">
+                                No categories found
+                            </td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
                 </div>
+                
+                <!-- Pagination -->
                 <div class="border-top d-flex justify-content-between align-items-md-center px-6 py-6 flex-md-row flex-column gap-4">
-                  <span>Showing 1 to 8 of 12 entries</span>
+                  <span>
+                    Showing {{ categories.from || 0 }} to {{ categories.to || 0 }} of {{ categories.total || 0 }} entries
+                  </span>
                   <nav>
                     <ul class="pagination mb-0">
-                      <li class="page-item disabled"><a class="page-link" href="#!">Previous</a></li>
-                      <li class="page-item"><a class="page-link active" href="#!">1</a></li>
-                      <li class="page-item"><a class="page-link" href="#!">2</a></li>
-                      <li class="page-item"><a class="page-link" href="#!">3</a></li>
-                      <li class="page-item"><a class="page-link" href="#!">Next</a></li>
+                        <li class="page-item" :class="{ disabled: !categories.prev_page_url }">
+                            <a 
+                                class="page-link" 
+                                href="#"
+                                @click.prevent="categories.prev_page_url && loadPage(categories.prev_page_url)"
+                            >
+                                Previous
+                            </a>
+                        </li>
+                        
+                        <!-- Page numbers -->
+                        <li 
+                            v-for="link in categories.links" 
+                            :key="link.label"
+                            class="page-item"
+                            :class="{ active: link.active, disabled: !link.url }"
+                        >
+                            <a 
+                                class="page-link" 
+                                href="#"
+                                v-html="link.label"
+                                @click.prevent="link.url && loadPage(link.url)"
+                            ></a>
+                        </li>
+                        
+                        <li class="page-item" :class="{ disabled: !categories.next_page_url }">
+                            <a 
+                                class="page-link" 
+                                href="#"
+                                @click.prevent="categories.next_page_url && loadPage(categories.next_page_url)"
+                            >
+                                Next
+                            </a>
+                        </li>
                     </ul>
                   </nav>
                 </div>
