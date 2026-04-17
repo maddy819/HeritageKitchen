@@ -30,7 +30,8 @@ return new class extends Migration {
             $table->text('meta_title')->nullable();
             $table->text('meta_description')->nullable();
 
-            $table->timestamps();
+            $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
 
             // Indexes for better performance
             $table->index('slug');

@@ -14,7 +14,8 @@ return new class extends Migration {
             $table->id();
             $table->foreignId('category_id')->constrained()->onDelete('cascade');
             $table->string('image');
-            $table->timestamps();
+            $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
 
             // Optional: add index for better performance
             $table->index(['category_id']);

@@ -2,8 +2,7 @@
 import Editor from '@/Components/UI/Editor.vue';
 import FileUpload from '@/Components/UI/FileUpload.vue';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
-import { getEditorContent } from "@/Plugins/Editor";
-import { getDropzoneInstance } from '@/Plugins/dropzone'
+import { getDropzoneInstance, setDropzoneFiles, setOnRemoveExistingCallback } from '@/Plugins/dropzone'
 import { route } from 'ziggy-js';
 import InputLabel from '@/Components/UI/InputLabel.vue';
 import TextInput from '@/Components/UI/TextInput.vue';
@@ -14,17 +13,39 @@ import { initDatepickers } from "@/Plugins/flatpickr"
 import { Link, useForm } from '@inertiajs/vue3';
 import axios from 'axios';
 
+const validationErrors = ref({});
+const isLoading = ref(false)
+const deletedImages = ref([]);
+const editorRef = ref(null);
+
+const props = defineProps({
+  categories: {
+    type: Array,
+    required: true,
+  },
+  category: {
+    type: Object,
+    required: false,
+  },
+})
+
+// Function to handle removal of existing images
+const handleExistingImageRemoval = (imageId, file) => {
+    console.log('Image marked for deletion:', imageId);
+    deletedImages.value.push(imageId);
+}
+
 onMounted(async () => {
     await nextTick()
     initDatepickers()
-})
+    
+    // Set callback for existing image removal
+    setOnRemoveExistingCallback(handleExistingImageRemoval);
 
-const validationErrors = ref({});
-
-const props = defineProps({
-  user: Object,
-  categories: Array,
-  stats: Object,
+    // If in edit mode, populate form with category data
+    if (props.category && props.category.id) {
+        populateFormWithCategoryData()
+    }
 })
 
 // Frontend validation function
@@ -37,12 +58,6 @@ const validateForm = () => {
         errors.name = 'Name must be at least 5 characters';
     }
     
-    if (!form.slug) {
-        errors.slug = 'Slug is required';
-    } else if (form.slug.length < 5) {
-        errors.slug = 'Slug must be at least 5 characters';
-    }
-    
     validationErrors.value = errors;
     return Object.keys(errors).length === 0;
 };
@@ -50,7 +65,6 @@ const validateForm = () => {
 const form = useForm({
     id: '',
     name: '',
-    slug: '',
     parent: '',
     description: '',
     status: '1',
@@ -58,7 +72,49 @@ const form = useForm({
     meta_description: '',
 });
 
+// Populate form with category data for editing
+const populateFormWithCategoryData = async () => {
+    if (props.category) {
+        form.id = props.category.id || ''
+        form.name = props.category.name || ''
+        form.parent = props.category.parent_id || ''
+        form.description = props.category.description || ''
+
+        // FIX: Ensure status is properly set as number
+        if (props.category.is_active !== undefined && props.category.is_active !== null) {
+            const statusValue = props.category.is_active === true || props.category.is_active === 1 ? '1' : '0';
+            form.status = statusValue;
+        }
+
+        form.meta_title = props.category.meta_title || ''
+        form.meta_description = props.category.meta_description || ''
+        
+        // Set editor content using the ref
+        if (props.category.description && editorRef.value) {
+            await nextTick();
+            editorRef.value.setContent(props.category.description);
+        }
+
+        // Reset deleted images array
+        deletedImages.value = [];
+        
+        // Set existing images in dropzone if any
+        if (props.category.images && props.category.images.length > 0) {
+            nextTick(() => {
+                setDropzoneFiles([], props.category.images);
+            });
+        }
+    }
+}
+
+// Handle editor content update
+const handleEditorUpdate = (content) => {
+    form.description = content;
+};
+
 async function submit() {
+    if (isLoading.value) return;
+
     // Clear previous errors
     validationErrors.value = {};
     form.clearErrors(); // Clear Inertia form errors
@@ -68,38 +124,84 @@ async function submit() {
         return;
     }
 
-    const description = getEditorContent();
-    const dz = getDropzoneInstance();
+    isLoading.value = true
+    await nextTick();
 
-    // ✅ create FormData
+    let description = '';
+    if (editorRef.value) {
+        description = editorRef.value.getContent();
+    }
+
+    const dz = getDropzoneInstance();
     const formData = new FormData();
+
+    // If editing, append id
+    if (form.id) {
+        formData.append("id", form.id);
+    }
+    
+    // Append deleted images IDs
+    if (deletedImages.value.length > 0) {
+        formData.append("deleted_images", JSON.stringify(deletedImages.value));
+        console.log('Deleting images:', deletedImages.value);
+    }
 
     // append normal fields
     formData.append("name", form.name);
-    formData.append("slug", form.slug);
     formData.append("parent", form.parent);
     formData.append("description", description);
     formData.append("status", form.status);
     formData.append("meta_title", form.meta_title);
     formData.append("meta_description", form.meta_description);
 
-    // ✅ append dropzone files manually
-    if (dz) {
-        dz.files.forEach((file, index) => {
-            if (file instanceof File) {
-                formData.append(`images[${index}]`, file);
+    // Append new images only (not existing ones)
+    if (dz && dz.files) {
+        let newFileIndex = 0;
+        for (const file of dz.files) {
+            // Only send files that are not existing (new uploads)
+            if (!file.existing && file instanceof File) {
+                formData.append(`images[${newFileIndex}]`, file);
+                newFileIndex++;
             }
-        });
+        }
     }
 
-    // ✅ send request
-    const response = await axios.post(route('admin.categories.store'), formData, {
-        headers: {
-            "Content-Type": "multipart/form-data"
-        }
-    });
+    try {
+      const response = await axios.post(route('admin.categories.store'), formData, {
+          headers: {
+              "Content-Type": "multipart/form-data"
+          }
+      });
 
-    console.log(response.data);
+      // Success handling
+        if (response.status === 200 || response.status === 201) {
+            alert(response.data.message || 'Category saved successfully!');
+            
+            if (!form.id) {
+                // Reset for new entry
+                form.reset(); // Use Inertia's form reset
+                if (dz) dz.removeAllFiles(true);
+
+                if (editorRef.value) {
+                    editorRef.value.setContent(''); // Clear editor content
+                }
+            } else {
+                // For edit mode, redirect after 1 second
+                setTimeout(() => {
+                    window.location.href = route('admin.categories');
+                }, 1000);
+                return; // Don't reset loading immediately
+            }
+        }
+    } catch (error) {
+      if (error.response && error.response.status === 422) {
+          validationErrors.value = error.response.data.errors
+      } else {
+          alert(error.response?.data?.message || 'Something went wrong')
+      }
+    } finally {
+      isLoading.value = false
+    }
 }
 
 // Create hierarchical list with -- indentation
@@ -157,9 +259,7 @@ const hierarchicalCategories = computed(() => {
           </div>
           <div class="row">
             <div class="col-lg-12 col-12">
-              <!-- card -->
-              <div class="card mb-6 shadow border-0">
-                <!-- Display summary of all errors at the top -->
+              <!-- Display summary of all errors at the top -->
                 <div v-if="Object.keys(validationErrors).length > 0 || Object.keys(form.errors).length > 0" class="alert alert-danger mb-4">
                     <strong>Please fix the following errors:</strong>
                     <ul class="mb-0 mt-2">
@@ -167,6 +267,8 @@ const hierarchicalCategories = computed(() => {
                         <li v-for="error in form.errors" :key="error">{{ error }}</li>
                     </ul>
                 </div>
+              <!-- card -->
+              <div class="card mb-6 shadow border-0">
                 <!-- card body -->
                 <form @submit.prevent="submit" class="needs-validation" novalidate>
                   <div class="card-body p-6">
@@ -183,12 +285,6 @@ const hierarchicalCategories = computed(() => {
                         <InputLabel for="name" class="form-label">Category Name</InputLabel>
                         <TextInput v-model="form.name" id="name" type="text" name="name" class="form-control" placeholder="Category Name" required="required" />
                         <div v-if="validationErrors.name || form.errors.name" class="invalid-feedback">{{ validationErrors.name || form.errors.name }}</div>
-                      </div>
-                      <!-- input -->
-                      <div class="mb-3 col-lg-6">
-                        <InputLabel for="slug" class="form-label">Slug</InputLabel>
-                        <TextInput type="text" v-model="form.slug" name="slug" id="slug" class="form-control" placeholder="Slug" required="required" />
-                        <div v-if="validationErrors.slug || form.errors.slug" class="invalid-feedback">{{ validationErrors.slug || form.errors.slug }}</div>
                       </div>
                       <!-- input -->
                       <div class="mb-3 col-lg-6">
@@ -212,7 +308,7 @@ const hierarchicalCategories = computed(() => {
                       <!-- input -->
                       <div class="mb-3 col-lg-12">
                         <InputLabel for="editor" class="form-label">Descriptions</InputLabel>
-                        <Editor id="editor" />
+                        <Editor id="editor" ref="editorRef" :content="form.description" placeholder="Write category description..." @update:content="handleEditorUpdate" />
                       </div>
 
                       <!-- input -->
@@ -220,12 +316,12 @@ const hierarchicalCategories = computed(() => {
                         <label class="form-label" id="productSKU">Status</label>
                         <br />
                         <div class="form-check form-check-inline">
-                          <TextInput v-model="form.meta_title" class="form-check-input" type="radio" name="inlineRadioOptions" id="inlineRadio1" value="1" checked />
+                          <TextInput class="form-check-input" type="radio" name="inlineRadioOptions" id="inlineRadio1" :value="1" :checked="form.status == 1" @change="form.status = 1" />
                           <InputLabel class="form-check-label" for="inlineRadio1">Active</InputLabel>
                         </div>
                         <!-- input -->
                         <div class="form-check form-check-inline">
-                          <TextInput v-model="form.meta_description" class="form-check-input" type="radio" name="inlineRadioOptions" id="inlineRadio2" value="0" />
+                          <TextInput class="form-check-input" type="radio" name="inlineRadioOptions" id="inlineRadio2" :value="0" :checked="form.status == 0" @change="form.status = 0" />
                           <InputLabel class="form-check-label" for="inlineRadio2">Disabled</InputLabel>
                         </div>
                         <!-- input -->
@@ -235,18 +331,18 @@ const hierarchicalCategories = computed(() => {
                         <!-- input -->
                         <div class="mb-3">
                           <InputLabel for="metatitle" class="form-label">Meta Title</InputLabel>
-                          <TextInput name="metatitle" type="text" id="metatitle" class="form-control" placeholder="Title" />
+                          <TextInput v-model="form.meta_title" name="metatitle" type="text" id="metatitle" class="form-control" placeholder="Title" />
                         </div>
 
                         <!-- input -->
                         <div class="mb-3">
                           <InputLabel for="metadescription" class="form-label">Meta Description</InputLabel>
-                          <TextArea name="metaescription" class="form-control" id="metadescription" rows="3" placeholder="Meta Description" />
+                          <TextArea v-model="form.meta_description" name="metaescription" class="form-control" id="metadescription" rows="3" placeholder="Meta Description" />
                         </div>
                       </div>
                       <div class="col-lg-12">
-                        <Button v-if="!form.id" href="#" class="btn btn-primary" :disabled="form.processing">{{ form.processing ? 'Creating...' : 'Create' }}</Button>
-                        <Button v-if="form.id"  href="#" class="btn btn-secondary ms-2" :disabled="form.processing">{{ form.processing ? 'Saving...' : 'Save' }}</Button>
+                        <Button v-if="!form.id" class="btn btn-primary" :disabled="isLoading"><span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>{{ isLoading ? 'Creating...' : 'Create' }}</Button>
+                        <Button v-if="form.id" class="btn btn-secondary" :disabled="isLoading"><span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>{{ isLoading ? 'Saving...' : 'Save' }}</Button>
                       </div>
                     </div>
                   </div>

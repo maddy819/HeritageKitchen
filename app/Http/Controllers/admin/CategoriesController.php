@@ -58,4 +58,18 @@ class CategoriesController extends Controller
 
         return redirect()->back()->with('success', 'Categories deleted successfully');
     }
+
+    /**
+     * Edit a category.
+     */
+    public function edit($id)
+    {
+        $category = Category::with('images')->findOrFail($id);
+
+        return Inertia::render('Admin/AddCategory', [
+            'category' => $category,
+            'categories' => Category::with('children')->get(),
+        ]);
+    }
+
 }

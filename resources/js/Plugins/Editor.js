@@ -3,9 +3,9 @@ import "quill/dist/quill.snow.css";
 
 let quillInstance = null;
 
-export function initEditor() {
+export function initEditor(ElementId = "editor") {
     var quill,
-        editorElement = document.querySelector("#editor");
+        editorElement = document.querySelector(`#${ElementId}`);
 
     // destroy existing before re-init (important for Inertia)
     if (editorElement && editorElement.__quill) {
@@ -78,4 +78,10 @@ export function destroyEditor() {
 
 export function getEditorContent() {
     return quillInstance ? quillInstance.root.innerHTML : "";
+}
+
+export function setEditorContent(content) {
+    if (quillInstance) {
+        quillInstance.root.innerHTML = content;
+    }
 }

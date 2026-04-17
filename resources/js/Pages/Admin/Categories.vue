@@ -409,20 +409,15 @@ const isSelected = (categoryId) => {
                                                             </a>
                                                         </li>
                                                         <li>
-                                                            <a
-                                                                class="dropdown-item"
-                                                                href="#"
-                                                                @click.prevent="
-                                                                    editCategory(
-                                                                        category.id,
-                                                                    )
-                                                                "
+                                                            <Link
+                                                              class="dropdown-item"
+                                                              :href="route('admin.categories.edit', category.id)"
                                                             >
                                                                 <i
                                                                     class="bi bi-pencil-square me-3"
                                                                 ></i>
                                                                 Edit
-                                                            </a>
+                                                            </Link>
                                                         </li>
                                                     </ul>
                                                 </div>
@@ -464,11 +459,11 @@ const isSelected = (categoryId) => {
                                             @click.prevent="
                                                 categories.prev_page_url &&
                                                 loadPage(
-                                                    categories.prev_page_url,
+                                                    categories.first_page_url,
                                                 )
                                             "
                                         >
-                                            Previous
+                                            First
                                         </a>
                                     </li>
 
@@ -504,11 +499,11 @@ const isSelected = (categoryId) => {
                                             @click.prevent="
                                                 categories.next_page_url &&
                                                 loadPage(
-                                                    categories.next_page_url,
+                                                    categories.last_page_url,
                                                 )
                                             "
                                         >
-                                            Next
+                                            Last
                                         </a>
                                     </li>
                                 </ul>

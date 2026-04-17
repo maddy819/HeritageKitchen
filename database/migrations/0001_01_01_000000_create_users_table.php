@@ -18,7 +18,8 @@ return new class extends Migration {
             $table->string('password');
             $table->enum('role', ['customer', 'admin'])->default('customer');
             $table->rememberToken();
-            $table->timestamps();
+            $table->timestamp('created_at')->useCurrent();
+            $table->timestamp('updated_at')->useCurrent()->useCurrentOnUpdate();
         });
     }
 

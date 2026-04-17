@@ -77,5 +77,6 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('categories/store', [AddCategoryController::class, 'store'])->name('categories.store');
     Route::delete('/categories/{id}', [CategoriesController::class, 'destroy'])->name('categories.destroy');
     Route::post('/categories/bulk-delete', [CategoriesController::class, 'bulkDelete'])->name('categories.bulk-delete');
+    Route::get('categories/edit/{id}', [CategoriesController::class, 'edit'])->name('categories.edit');
 });
 

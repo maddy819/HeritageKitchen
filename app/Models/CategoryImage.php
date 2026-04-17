@@ -15,10 +15,14 @@ class CategoryImage extends Model
     protected $fillable = [
         'category_id',
         'image',
+        'imagetype',
+        'imageurl',
+        'imagesize',
     ];
 
     protected $casts = [
         'category_id' => 'integer',
+        'imagesize' => 'integer',
     ];
 
     /**

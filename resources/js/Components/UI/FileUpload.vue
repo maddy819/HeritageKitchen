@@ -1,6 +1,6 @@
 <script setup>
-import { onMounted, nextTick } from "vue"
-import { initDropzones } from "@/Plugins/dropzone"
+import { onMounted, nextTick, onBeforeUnmount } from "vue"
+import { getDropzoneInstance, initDropzones } from "@/Plugins/dropzone"
 
 const props = defineProps({
     id: {
@@ -18,6 +18,13 @@ onMounted(async () => {
     
     initDropzones(props.id, props.url)
 })
+
+onBeforeUnmount(() => {
+    const dz = getDropzoneInstance();
+    if (dz) {
+        dz.destroy();
+    }
+});
 </script>
 
 <template>
